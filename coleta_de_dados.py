@@ -5,12 +5,15 @@
 # pip install scikit-learn
 from funcoes import morgan_fp
 from funcoes import fp_to_array
+from funcoes import val_cruzada
 
 import pandas as pd
 import numpy as np
+
 from chembl_webresource_client.new_client import new_client
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from sklearn.model_selection import train_test_split
 
 
 # %%
@@ -73,10 +76,8 @@ df_raio2_1024['morgan'] = df_raio2_1024['mol'].apply(morgan_fp, fpsize=1024)
 df_raio2_2048['morgan'] = df_raio2_2048['mol'].apply(morgan_fp, fpsize=2048)
 
 df_raio3_512['morgan'] = df_raio3_512['mol'].apply(morgan_fp, raio=3)
-df_raio3_1024['morgan'] = df_raio3_1024['mol'].apply(
-    morgan_fp, raio=3, fpsize=1024)
-df_raio2_2048['morgan'] = df_raio2_2048['mol'].apply(
-    morgan_fp, raio=3, fpsize=2048)
+df_raio3_1024['morgan'] = df_raio3_1024['mol'].apply(morgan_fp, raio=3, fpsize=1024)
+df_raio3_2048['morgan'] = df_raio3_2048['mol'].apply(morgan_fp, raio=3, fpsize=2048)
 
 
 # %%
@@ -87,3 +88,66 @@ print(df_raio3_2048.iloc[0, 3].GetNumBits())
 
 # %%
 # Agora temos que transformar essas subestruturas numa frequencia para o scikit
+X_r2_512  = np.vstack(df_raio2_512['morgan'].apply(fp_to_array))
+X_r2_1024 = np.vstack(df_raio2_1024['morgan'].apply(fp_to_array))
+X_r2_2048 = np.vstack(df_raio2_2048['morgan'].apply(fp_to_array))
+X_r3_512  = np.vstack(df_raio3_512['morgan'].apply(fp_to_array))
+X_r3_1024 = np.vstack(df_raio3_1024['morgan'].apply(fp_to_array))
+X_r3_2048 = np.vstack(df_raio3_2048['morgan'].apply(fp_to_array))
+
+# %%
+
+print(f"Raio 2, 512 bits: {X_r2_512.shape}")
+print(f"Raio 3, 512 bits: {X_r3_2048.shape}")
+
+# %%
+# Mudando as expressoes de active == 1 e inactive == 0
+mapa = {'Active': 1, 'Inactive': 0}
+
+y = df_malaria['status'].map(mapa)
+
+# %%
+print(y)
+
+# %%
+# Inicialmente vamos dividir o primeiro conjunto de dados 
+# (RAIO 2 E 512 bits   )
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_r2_512, y, test_size=0.2, random_state=42 
+)
+
+print (f"Tamanho da amostra de treino: {X_train.shape}")
+print (f"Tamanho da amostra de teste: {X_test.shape}")
+
+# %% 
+# Treinando inicialmente usando Random Forest
+from sklearn.ensemble import RandomForestClassifier
+
+modelo_r2_512 = RandomForestClassifier(n_estimators=100, random_state=42)
+modelo_r2_512.fit(X_train, y_train)
+
+# %%
+from sklearn.model_selection import cross_val_score
+
+n_scores = cross_val_score(modelo_r2_512, X_train, y_train, scoring='accuracy',cv=10, n_jobs=-1)
+
+print("Acurácias:", n_scores)
+print("\nMédia das acurácias obtidas:", n_scores.mean())
+print("\nDesvio padrão das acurácias obtidas:", n_scores.std())
+
+# %%
+# Verificando a performance do modelo com raio 2 e 512 bits para 
+# outros modelos de classificação
+
+lista_algoritmos = ['SVM', 'KNN', 'XGBoost', 'MLP', 'Regressao Logistica']
+
+# %%
+val_cruzada(lista_algoritmos, X_train, y_train)
+# SVM E KNN Saem na frente aqui, com uma leve vantagem para o SVM
+# Uma vez que ao aumentar a dimensionalidade, o KNN perde força
+# e esses dados tratados foram apenas de 512 bits.
+
+
+# %%
+# Fazendo um grid search para o SVM
