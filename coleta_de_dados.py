@@ -137,6 +137,12 @@ print("\nMédia das acurácias obtidas:", n_scores.mean())
 print("\nDesvio padrão das acurácias obtidas:", n_scores.std())
 
 # %%
+# Fine tuning do random forest
+
+par_grid={}
+
+
+# %%
 # Verificando a performance do modelo com raio 2 e 512 bits para 
 # outros modelos de classificação
 
@@ -150,4 +156,57 @@ val_cruzada(lista_algoritmos, X_train, y_train)
 
 
 # %%
-# Fazendo um grid search para o SVM
+# Fazendo um grid search para o SVM já que obteve os melhores 
+# resultados de benchmark
+# Os hiperparametros selecionados tiveram com base a alta quantidade
+# de amostras negativas (90%)
+
+parametros_grid ={'C':[0.1,1,10],
+                  'kernel': ['rbf', 'linear'],
+                  'gamma': [0.1, 0.01, 0.001],
+                  'class_weight': ['balanced']}
+
+# Agora um objeto deve ser instanciado com os parametros nele
+
+from sklearn.model_selection import GridSearchCV
+from sklearn import svm
+
+grid_search = GridSearchCV(svm.SVC(),parametros_grid, cv=10, scoring='f1', n_jobs=-1,verbose = 0)
+
+grid_search.fit(X_train, y_train)
+
+# %%
+print("Melhor combinação de hiperparâmetros:")
+print(grid_search.best_params_)
+
+print("\nMelhor recall obtida:")
+print(grid_search.best_score_)
+
+# Aparentemente os valores default do svm 
+# superaram os hiperparametros selecionados
+# Porém o hiperparâmetro 'class_weight' default tem menos valor
+# É válido rodar uma matriz de confusão para as duas formas
+# %%
+modelo_svm = svm.SVC(C=0.5,class_weight = 'balanced',gamma=0.1, kernel='rbf')
+modelo_svm.fit(X_train,y_train)
+
+# %%
+previsoes = modelo_r2_512.predict(X_test)
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+conf_matrix = confusion_matrix(y_test, previsoes)
+sns.heatmap(conf_matrix, fmt='d', annot=True, cmap='Blues')
+plt.xlabel('Previsão')
+plt.ylabel('Real')
+plt.title('Matriz de Confusão')
+plt.show()
+
+## Existem muitos falsos negativos
+# Porém, o modelo não deu nenhum falso positivo o que é um bom sinal
+# Devemos ajustar o gridsearch para trazer tentar otimizar isso ou buscar equilibrar
+# O dataset
+
+
+
