@@ -196,6 +196,8 @@ dict_fingerprints = {'Morgan R2 512': X_r2_512,
                                 'Morgan R3 1024': X_r3_1024,
                                 'Morgan R3 2048': X_r3_2048}
 
+melhor_recall = {'nome': '', 'score_recall': 0 }
+melhor_f1 = {'nome': '', 'score_f1': 0}
 for nome, x_atual in dict_fingerprints.items():
     X_train, X_test, y_train, y_test = train_test_split(
     x_atual, y, test_size=0.2, random_state=42)
@@ -205,10 +207,24 @@ for nome, x_atual in dict_fingerprints.items():
     n_scores = cross_validate(
             modelo, X_train, y_train, scoring=scoring, cv=10, n_jobs=-1) 
     print(f"Modelo {nome}")
+
+    if melhor_recall['score_recall'] < np.mean(n_scores['test_recall']):
+        melhor_recall['nome'] = nome
+        melhor_recall['score_recall'] = np.mean(n_scores['test_recall']) 
+
+    if melhor_f1['score_f1'] < np.mean(n_scores['test_f1']):
+        melhor_f1['nome'] = nome
+        melhor_f1['score_f1'] = np.mean(n_scores['test_f1'])
+
     for i in n_scores.keys():
         print(f"AVG {i} = {np.mean(n_scores[i])}")
         print(f"NP {i} = {np.std(n_scores[i])}\n")
 
+# %%
+# Apresentando melhores modelos de recall e f1-score
+# R2 2048 é o mais interessante
+print(melhor_f1)
+print(melhor_recall)
 
 # %%
 # Realização de três métodos de fine-tuning de hiperparametros
