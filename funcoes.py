@@ -14,14 +14,16 @@ def fp_to_array(fp):
     DataStructs.ConvertToNumpyArray(fp, arr)
     return arr
 
+
 def val_cruzada(lista_algoritmos, X, y):
     from tqdm.notebook import tqdm
-    from sklearn.model_selection import cross_val_score
+    from sklearn.model_selection import cross_validate
     from sklearn.linear_model import LogisticRegression
     from sklearn.neural_network import MLPClassifier
     from sklearn.neighbors import KNeighborsClassifier
     from xgboost import XGBClassifier
     from sklearn import svm
+    metrica = ['recall', 'accuracy', 'f1', 'roc_auc']
 
     print("Valores de acurácia média para validação cruzada 10x:")
     for a in tqdm(lista_algoritmos):
@@ -37,10 +39,9 @@ def val_cruzada(lista_algoritmos, X, y):
             modelo = LogisticRegression()
 
 # Executando a validacao cruzada 10x
-        n_scores = cross_val_score(modelo, X, y, scoring='accuracy', cv= 10, n_jobs=-1)
-        media_acuracias = n_scores.mean()
-        desvio_padrao = n_scores.std()
-    
-        print(f"{a}: {media_acuracias} (Desvio Padrão: {desvio_padrao})")
-
-
+        n_scores = cross_validate(
+            modelo, X, y, scoring=metrica, cv=10, n_jobs=-1)
+        print(f"Modelo {a}")
+        for i in n_scores.keys():
+            print(f"AVG {i} = {np.mean(n_scores[i])}")
+            print(f"NP {i} = {np.std(n_scores[i])}\n")
