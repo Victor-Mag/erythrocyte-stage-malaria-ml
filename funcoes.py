@@ -45,3 +45,4 @@ def val_cruzada(lista_algoritmos, X, y):
         for i in n_scores.keys():
             print(f"AVG {i} = {np.mean(n_scores[i])}")
             print(f"NP {i} = {np.std(n_scores[i])}\n")
+

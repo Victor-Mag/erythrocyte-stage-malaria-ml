@@ -17,9 +17,6 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from sklearn.model_selection import train_test_split
 
-
-# %%
-
 # %%
 data_xlsx_jh = pd.read_excel(
     'dataset\dataset-malaria-johnhopkins.xlsx', index_col=None)
@@ -232,49 +229,118 @@ print(df_performance.sort_values(by=['accuracy'],ascending= False).head(3))
 # O dataframe Morgan R2 2048 É o campeão =)
 
 # %%
-# Realização de três métodos de fine-tuning de hiperparametros
-# 1. Grid search
-# 2. Randomized Search
-# 3. Bayesian Optimization
+X_train, X_test, y_train, y_test = train_test_split(
+    X_r2_2048, y, test_size= 0.2, random_state= 42
+)
 
-parametros_grid = {'C': [0.1, 1, 10],
-                   'kernel': ['rbf', 'linear'],
-                   'gamma': [0.1, 0.01, 0.001],
-                   'class_weight': ['balanced']}
+modelo_escolhido = XGBClassifier(scale_pos_weight =(((len(df_malaria)-contagem)/contagem)))
+modelo_escolhido.fit(X_train, y_train)
+# %%
+scoring = ['accuracy', 'roc_auc', 'f1', 'recall']
 
-# Agora um objeto deve ser instanciado com os parametros nele
+n_scores = cross_validate(modelo_escolhido, X_train,
+                          y_train, scoring=scoring, cv=10, n_jobs=-1)
 
-grid_search = GridSearchCV(xgb.XGBClassifier(), parametros_grid,
-                           cv=10, scoring='f1', n_jobs=-1, verbose=0)
-
-grid_search.fit(X_train, y_train)
+for i in n_scores.keys():
+    print(f"{i} = {np.mean(n_scores[i])}")
 
 # %%
-print("Melhor combinação de hiperparâmetros:")
-print(grid_search.best_params_)
+# Fazendo previsões no conjunto de teste
+previsoes = modelo_escolhido.predict(X_test)
 
-print("\nMelhor recall obtida:")
-print(grid_search.best_score_)
-
-# Aparentemente os valores default do svm
-# superaram os hiperparametros selecionados
-# Porém o hiperparâmetro 'class_weight' default tem menos valor
-# É válido rodar uma matriz de confusão para as duas formas
-# %%
-modelo_svm = svm.SVC(C=0.5, class_weight='balanced', gamma=0.1, kernel='rbf')
-modelo_svm.fit(X_train, y_train)
-
-# %%
-previsoes = modelo_r2_512.predict(X_test)
+# Exibindo a matriz de confusão
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 conf_matrix = confusion_matrix(y_test, previsoes)
-sns.heatmap(conf_matrix, fmt='d', annot=True, cmap='Blues')
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['Inativo', 'Ativo',], yticklabels=['Inativo', 'classe_1', 'Ativo'])
 plt.xlabel('Previsão')
 plt.ylabel('Real')
 plt.title('Matriz de Confusão')
 plt.show()
 
-# Existem muitos falsos negativos
-# Porém, o modelo não deu nenhum falso positivo o que é um bom sinal
-# Devemos ajustar o gridsearch para trazer tentar otimizar isso ou buscar equilibrar
-# O dataset
+
+
+# %%
+# FINE-TUNING do modelo XGBoost com df R2 2048
+# -> Randomized Search
+from scipy.stats import uniform, randint
+from sklearn.model_selection import RandomizedSearchCV
+peso_base = (len(df_malaria)-contagem) / contagem
+
+# Como é interessante melhorar a métrica de recall, é importante atribuir pesos
+# maiores em scale_pos_weight
+
+param_rs ={
+    'scale_pos_weight': [peso_base, peso_base*5, peso_base*10, peso_base*20],
+
+    # Parâmetros de árvore
+    'max_depth': randint(3,10),
+    'min_child_weight': randint(1,6),
+    'subsample': uniform (0.6,0.4),
+    'colsample_bytree': uniform(0.6,0.4),
+    
+    # Parâmetros de aprendizado
+    'learning_rate': [0.01, 0.05, 0.1, 0.2],
+    'n_estimators': randint(100,1000)
+}
+
+modelo_base = XGBClassifier(random_state=42)
+
+random_search = RandomizedSearchCV(
+    estimator = modelo_base,
+    param_distributions = param_rs,
+    n_iter = 50, # Quantidade de amostras a serem realizadas
+    scoring = 'f1',
+    verbose = 1,
+    n_jobs= -1,
+    cv= 5,
+    random_state=42
+)
+
+random_search.fit(X_train, y_train)
+
+print(f"Melhores parâmetros: {random_search.best_params_}")
+print(f"Melhor pontuação de CV em f1: {random_search.best_score_:.4f}")
+print(f"Pontuação do conjunto de teste: {random_search.score(X_test, y_test):.4f}")
+
+# %%
+# Fazendo fit do modelo com os parâmetros melhores de recall e verificando
+# suas estatisticas
+
+melhores_parametros = random_search.best_params_
+
+modelo_otimizado = XGBClassifier(**melhores_parametros)
+modelo_otimizado.fit(X_train, y_train)
+
+# %%
+
+previsoes = modelo_otimizado.predict(X_test)
+
+# Exibindo a matriz de confusão
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+conf_matrix = confusion_matrix(y_test, previsoes)
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['Inativo', 'Ativo',], yticklabels=['Inativo', 'classe_1', 'Ativo'])
+plt.xlabel('Previsão')
+plt.ylabel('Real')
+plt.title('Matriz de Confusão')
+plt.show()
+
+# %%
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score, roc_auc_score
+
+precision, recall, f1, support = precision_recall_fscore_support(y_test, previsoes)
+accuracy = accuracy_score(y_test, previsoes)
+#roc_auc = roc_auc_score(y_test, prev_proba)
+
+print(f"Accuracy: {accuracy}")
+print(f"Precision: {precision}")
+print(f"Recall: {recall}")
+print(f"F1 Score: {f1}")
+#print(f"ROC AUC: {roc_auc}")
+
+
